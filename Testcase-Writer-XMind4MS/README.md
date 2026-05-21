@@ -1,6 +1,6 @@
 # Testcase-Writer-XMind WorkBuddy 技能包
 
-这是一个专为 **WorkBuddy 平台** 设计的技能包。它能够将用户用自然语言描述的功能需求，自动转换为**严格符合规范、可直接导入 XMind 生成思维导图**的测试用例 Markdown 文档，并**在服务器本地生成可直接导入metersphere平台的 `.xmind` 文件**。
+这是一个技能包。它能够将用户用自然语言或图片等描述的功能需求，自动转换为**严格符合规范、可直接导入 XMind 生成思维导图**的测试用例 Markdown 文档，并**在服务器本地生成可直接导入metersphere平台的 `.xmind` 文件**。
 
 ## 📦 技能包内容
 本压缩包 (`testcase_writer_xmind.zip`) 包含以下文件：
