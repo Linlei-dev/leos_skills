@@ -9,10 +9,8 @@ import zipfile
 import os
 import re
 import sys
-import uuid
 import tempfile
 from datetime import datetime
-from pathlib import Path
 
 def parse_markdown_to_tree(md_content):
     """
@@ -21,7 +19,7 @@ def parse_markdown_to_tree(md_content):
     ## 二级标题 -> 二级节点（独立模块）
     - 列表项 -> 三级及以下节点（根据缩进）
     """
-    lines = md_content.split('\n')
+    lines = md_content.lstrip('\ufeff').split('\n')
     root = None
     stack = []  # 用于维护当前路径的栈
     
@@ -52,6 +50,10 @@ def parse_markdown_to_tree(md_content):
         elif line.startswith('## '):
             level = 2
             text = line.lstrip('#').strip()
+
+            if root is None:
+                root = {'level': 1, 'text': '测试用例思维导图', 'children': []}
+                stack = [root]
             
             node = {'level': level, 'text': text, 'children': []}
             
@@ -78,6 +80,15 @@ def parse_markdown_to_tree(md_content):
             if text:
                 # 列表层级：从3级开始（因为1级是#，2级是##）
                 list_level = 3 + (indent // 2)
+
+                # 兼容旧版规范：如果##标题下紧跟同名一级列表项，则跳过，避免XMind第二/三层重复。
+                if (
+                    list_level == 3
+                    and stack
+                    and stack[-1]['level'] == 2
+                    and stack[-1]['text'] == text
+                ):
+                    continue
                 
                 node = {'level': list_level, 'text': text, 'children': []}
                 
@@ -163,32 +174,29 @@ def convert_md_to_xmind(md_file_path, xmind_file_path, title="测试用例"):
     manifest = create_manifest()
     metadata = create_metadata()
     
-    # 创建临时目录
-    temp_dir = "/tmp/xmind_temp"
-    os.makedirs(temp_dir, exist_ok=True)
-    
-    # 保存JSON文件到临时目录
-    with open(os.path.join(temp_dir, "manifest.json"), 'w', encoding='utf-8') as f:
-        json.dump(manifest, f, ensure_ascii=False, indent=2)
-    
-    with open(os.path.join(temp_dir, "content.json"), 'w', encoding='utf-8') as f:
-        json.dump(content, f, ensure_ascii=False, indent=2)
-    
-    with open(os.path.join(temp_dir, "metadata.json"), 'w', encoding='utf-8') as f:
-        json.dump(metadata, f, ensure_ascii=False, indent=2)
-    
-    # 创建XMind文件（ZIP格式）
-    print(f"正在保存XMind文件: {xmind_file_path}")
-    with zipfile.ZipFile(xmind_file_path, 'w', zipfile.ZIP_DEFLATED) as xmind_zip:
-        xmind_zip.write(os.path.join(temp_dir, "manifest.json"), "manifest.json")
-        xmind_zip.write(os.path.join(temp_dir, "content.json"), "content.json")
-        xmind_zip.write(os.path.join(temp_dir, "metadata.json"), "metadata.json")
-    
-    # 清理临时文件
-    import shutil
-    shutil.rmtree(temp_dir)
-    
-    print("✅ 转换完成！")
+    output_dir = os.path.dirname(os.path.abspath(xmind_file_path))
+    if output_dir:
+        os.makedirs(output_dir, exist_ok=True)
+
+    with tempfile.TemporaryDirectory(prefix="xmind_temp_") as temp_dir:
+        # 保存JSON文件到临时目录
+        with open(os.path.join(temp_dir, "manifest.json"), 'w', encoding='utf-8') as f:
+            json.dump(manifest, f, ensure_ascii=False, indent=2)
+
+        with open(os.path.join(temp_dir, "content.json"), 'w', encoding='utf-8') as f:
+            json.dump(content, f, ensure_ascii=False, indent=2)
+
+        with open(os.path.join(temp_dir, "metadata.json"), 'w', encoding='utf-8') as f:
+            json.dump(metadata, f, ensure_ascii=False, indent=2)
+
+        # 创建XMind文件（ZIP格式）
+        print(f"正在保存XMind文件: {xmind_file_path}")
+        with zipfile.ZipFile(xmind_file_path, 'w', zipfile.ZIP_DEFLATED) as xmind_zip:
+            xmind_zip.write(os.path.join(temp_dir, "manifest.json"), "manifest.json")
+            xmind_zip.write(os.path.join(temp_dir, "content.json"), "content.json")
+            xmind_zip.write(os.path.join(temp_dir, "metadata.json"), "metadata.json")
+
+    print("转换完成！")
     print(f"   XMind文件已保存到: {xmind_file_path}")
     
     # 统计信息
@@ -206,7 +214,7 @@ def count_nodes(node):
 
 if __name__ == '__main__':
     if len(sys.argv) < 3:
-        print("用法: python md_to_xmind_final.py <input.md> <output.xmind> [title]")
+        print("用法: python md_to_xmind4ms.py <input.md> <output.xmind> [title]")
         sys.exit(1)
     
     md_file = sys.argv[1]

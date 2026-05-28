@@ -8,13 +8,13 @@ testcase_writer_xmind/
 ├── SKILL.md # 技能主配置文件 (WorkBuddy读取)
 ├── FORMAT_SPEC.md # 核心格式规范 (AI生成时必须遵守)
 ├── scripts/ # 本地文件生成脚本目录
-│ └── md_to_xmind.py # Markdown 转 XMind 核心脚本
+│ └── md_to_xmind4ms.py # Markdown 转 XMind 核心脚本
 └── README.md # 本说明文件
 
 ## 🎯 核心功能
 1.  **智能分析**：用户在 WorkBuddy 中通过触发词 `/生成测试用例` 输入需求，技能调用平台 AI 进行分析。
 2.  **规范生成**：AI 严格按照 `FORMAT_SPEC.md` 中的规则，生成结构化的测试用例 Markdown 文档。
-3.  **文件生成**：调用 `scripts/md_to_xmind.py` 脚本，将 Markdown 文档转换为标准的 `.xmind` 文件，**保存在运行 WorkBuddy 技能的服务器的本地指定目录**（默认为 `./output/`）。
+3.  **文件生成**：调用 `scripts/md_to_xmind4ms.py` 脚本，将 Markdown 文档转换为标准的 `.xmind` 文件，**保存在 WorkBuddy 调用时传入的本地输出路径**。
 4.  **结果返回**：技能在聊天中返回操作结果，并告知生成文件的**本地绝对路径**。
 
 ## 🚀 快速开始 (部署与使用)
@@ -44,7 +44,7 @@ testcase_writer_xmind/
 
 ### 1. `FORMAT_SPEC.md`
 - **定位**：技能的“宪法”。定义了 AI 生成 Markdown 时必须遵循的**所有格式、字段和层级规则**。
-- **作用**：确保生成的每一个用例都包含 `模块路径`、`子模块名称`、`case`、`标签`、`步骤描述`、`预期结果`、`用例等级` 这 7 个核心字段，且顺序、缩进、标点完全一致。这是生成有效 XMind 文件的前提。
+- **作用**：确保生成的每一个用例都包含 `模块路径`、`子模块名称`、`case`、`标签`、`步骤描述`、`预期结果`、`用例等级` 这 7 个核心字段，且顺序、缩进、标点完全一致。`## 模块路径` 标题下必须直接输出 `- 子模块名称`，不要再重复输出同名模块路径，这是避免 XMind 第二/三层级重复的前提。
 
 ### 2. `SKILL.md`
 - **定位**：技能的“总控开关”和“使用说明书”（给 WorkBuddy 平台和 AI 看）。
@@ -52,17 +52,17 @@ testcase_writer_xmind/
     - **YAML 头部**：定义了技能名称、触发词、调用的 AI 模型、参数等。
     - **Prompt 正文**：以严格的指令告诉 AI 如何扮演角色、如何工作、必须遵守哪些规范，并提供了输出格式示例。
 
-### 3. `scripts/md_to_xmind.py` (可选但推荐)
+### 3. `scripts/md_to_xmind4ms.py` (可选但推荐)
 - **定位**：技能的“后端执行引擎”。
 - **作用**：在 WorkBuddy 技能被触发并生成 Markdown 后，此脚本会被调用。它负责：
     1.  解析 Markdown 的结构。
     2.  按照 XMind 的文件格式规范，构建 XML 内容。
     3.  将 XML 及其他必要文件打包成一个 `.xmind` 压缩包。
     4.  将此文件保存到服务器本地。
-- **输出目录**：脚本默认在当前工作目录下创建 `output/` 文件夹来存放文件。可以通过修改脚本中的 `output_dir` 参数或环境变量来改变。
+- **输出目录**：脚本根据命令行传入的 `<output.xmind>` 路径保存文件；如果目标目录不存在，会自动创建。
 
 ## 🔧 高级配置
-- **修改输出目录**：编辑 `scripts/md_to_xmind.py` 中 `convert_and_save` 函数的 `output_dir` 参数，或设置环境变量。
+- **修改输出目录**：调用 `scripts/md_to_xmind4ms.py <input.md> <output.xmind> [title]` 时传入目标输出路径；脚本会自动创建输出目录。
 - **调整 AI 模型**：在 `SKILL.md` 的 YAML 头部修改 `ai_model` 值（需确保 WorkBuddy 平台支持该模型）。
 - **调整生成风格**：在 `SKILL.md` 的 YAML 头部微调 `temperature` (控制随机性) 和 `max_tokens` (控制输出长度)。
 
@@ -78,7 +78,7 @@ A2: 请检查：
    3.  WorkBuddy 平台是否支持运行 Python 脚本 (`scripts/`)。
 
 **Q3: 能否生成其他格式（如 Excel、Word）？**
-A3: 本技能核心是生成 XMind 兼容的 Markdown。您可以通过修改 `scripts/md_to_xmind.py` 脚本，重写 `build_xmind_xml` 和 `create_xmind_archive` 函数，将其替换为生成其他格式的逻辑。
+A3: 本技能核心是生成 XMind 兼容的 Markdown。您可以通过修改 `scripts/md_to_xmind4ms.py` 脚本中的解析与打包逻辑，将其替换为生成其他格式的逻辑。
 
 **Q4: AI 生成的用例质量不高怎么办？**
 A4: 提供更清晰、更详细的需求描述。您可以在需求中指定：“请按 **模块 -> 子模块 -> 功能点** 的结构划分”，或“请务必包含 **正常场景、异常场景、边界场景** 的用例”。
