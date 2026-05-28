@@ -12,6 +12,45 @@ import sys
 import tempfile
 from datetime import datetime
 
+DETAIL_FIELD_PREFIXES = (
+    "标签:",
+    "前置条件:",
+    "步骤描述:",
+    "步骤:",
+    "预期结果:",
+    "用例等级:",
+)
+
+
+def normalize_root_title(text):
+    """将根节点标题统一为“系统/功能名称测试用例”。"""
+    title = text.strip()
+    if not title:
+        return "测试用例思维导图"
+    if title.endswith("测试用例"):
+        return title
+    return f"{title}测试用例"
+
+
+def infer_root_title_from_module(module_path):
+    """从模块路径兜底推断根节点标题，如“系统管理-操作手册管理-模块分类管理” -> “操作手册管理测试用例”。"""
+    parts = [part.strip() for part in re.split(r"[-－—/]", module_path) if part.strip()]
+    if len(parts) >= 2:
+        return normalize_root_title(parts[1])
+    if parts:
+        return normalize_root_title(parts[0])
+    return "测试用例思维导图"
+
+
+def is_case_topic(text):
+    return text.strip().lower().startswith("case:")
+
+
+def is_detail_field_topic(text):
+    clean_text = text.strip()
+    return any(clean_text.startswith(prefix) for prefix in DETAIL_FIELD_PREFIXES)
+
+
 def parse_markdown_to_tree(md_content):
     """
     严格按层级解析Markdown：
@@ -31,7 +70,7 @@ def parse_markdown_to_tree(md_content):
         # 1. 处理一级标题 (# 开头)
         if line.startswith('# '):
             level = 1
-            text = line.lstrip('#').strip()
+            text = normalize_root_title(line.lstrip('#').strip())
             
             node = {'level': level, 'text': text, 'children': []}
             
@@ -52,7 +91,7 @@ def parse_markdown_to_tree(md_content):
             text = line.lstrip('#').strip()
 
             if root is None:
-                root = {'level': 1, 'text': '测试用例思维导图', 'children': []}
+                root = {'level': 1, 'text': infer_root_title_from_module(text), 'children': []}
                 stack = [root]
             
             node = {'level': level, 'text': text, 'children': []}
@@ -105,7 +144,7 @@ def parse_markdown_to_tree(md_content):
     
     return root
 
-def create_xmind_topic(node, topic_id="root"):
+def create_xmind_topic(node, topic_id="root", depth=1):
     """创建XMind主题节点"""
     topic = {
         "id": topic_id,
@@ -114,11 +153,20 @@ def create_xmind_topic(node, topic_id="root"):
             "attached": []
         }
     }
+
+    if depth == 1:
+        topic["structureClass"] = "org.xmind.ui.logic.right"
+
+    if is_case_topic(node['text']) and node['children']:
+        topic["folded"] = True
+
+    if is_detail_field_topic(node['text']) and node['children']:
+        topic["folded"] = True
     
     # 递归创建子主题
     for idx, child in enumerate(node['children']):
         child_id = f"{topic_id}_{idx}"
-        child_topic = create_xmind_topic(child, child_id)
+        child_topic = create_xmind_topic(child, child_id, depth + 1)
         topic['children']['attached'].append(child_topic)
     
     # 如果没有子节点，移除children字段（避免空结构）
