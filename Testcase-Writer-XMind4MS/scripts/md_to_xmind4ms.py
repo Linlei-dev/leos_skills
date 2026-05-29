@@ -11,6 +11,7 @@ import re
 import sys
 import tempfile
 from datetime import datetime
+from typing import Any, Dict, List, Optional, Tuple
 
 DETAIL_FIELD_PREFIXES = (
     "标签:",
@@ -22,7 +23,7 @@ DETAIL_FIELD_PREFIXES = (
 )
 
 
-def normalize_root_title(text):
+def normalize_root_title(text: str) -> str:
     """将根节点标题统一为“系统/功能名称测试用例”。"""
     title = text.strip()
     if not title:
@@ -32,7 +33,7 @@ def normalize_root_title(text):
     return f"{title}测试用例"
 
 
-def infer_root_title_from_module(module_path):
+def infer_root_title_from_module(module_path: str) -> str:
     """从模块路径兜底推断根节点标题，如“系统管理-操作手册管理-模块分类管理” -> “操作手册管理测试用例”。"""
     parts = [part.strip() for part in re.split(r"[-－—/]", module_path) if part.strip()]
     if len(parts) >= 2:
@@ -42,23 +43,23 @@ def infer_root_title_from_module(module_path):
     return "测试用例思维导图"
 
 
-def is_case_topic(text):
+def is_case_topic(text: str) -> bool:
     return text.strip().lower().startswith("case:")
 
 
-def is_detail_field_topic(text):
+def is_detail_field_topic(text: str) -> bool:
     clean_text = text.strip()
     return any(clean_text.startswith(prefix) for prefix in DETAIL_FIELD_PREFIXES)
 
 
-def parse_markdown_to_tree(md_content):
+def parse_markdown_to_tree(md_content: str) -> Dict[str, Any]:
     """
     严格按层级解析Markdown：
     # 一级标题 -> 根节点
     ## 二级标题 -> 二级节点（独立模块）
     - 列表项 -> 三级及以下节点（根据缩进）
     """
-    lines = md_content.lstrip('\ufeff').split('\n')
+    lines = md_content.replace('\ufeff', '').split('\n')
     root = None
     stack = []  # 用于维护当前路径的栈
     
@@ -144,7 +145,49 @@ def parse_markdown_to_tree(md_content):
     
     return root
 
-def create_xmind_topic(node, topic_id="root", depth=1):
+
+def validate_markdown(md_content: str) -> Tuple[bool, List[str]]:
+    """校验 Markdown 格式是否符合规范，返回 (是否通过, 错误列表)"""
+    errors: List[str] = []
+    lines = md_content.replace('\ufeff', '').split('\n')
+    
+    # 检查1: 第一行必须是一级标题
+    first_line = ""
+    for line in lines:
+        stripped = line.strip()
+        if stripped:
+            first_line = stripped
+            break
+    if not first_line.startswith('# '):
+        errors.append("文档首行必须是一级标题 `# <系统名称>测试用例`")
+    
+    # 检查2: 每个 ## 下面必须有内容
+    in_section = False
+    section_has_content = False
+    section_name = ""
+    for line in lines:
+        stripped = line.strip()
+        if stripped.startswith('## '):
+            if in_section and not section_has_content:
+                errors.append(f"模块 `{section_name}` 下没有测试用例内容")
+            in_section = True
+            section_has_content = False
+            section_name = stripped[3:].strip()
+        elif in_section and stripped.startswith('-') and ('case:' in stripped or stripped.lstrip('-').strip()):
+            section_has_content = True
+    
+    if in_section and not section_has_content:
+        errors.append(f"模块 `{section_name}` 下没有测试用例内容")
+    
+    # 检查3: case 条目必须有所有必填字段
+    case_lines = [l for l in lines if l.strip().startswith('- case:')]
+    if not case_lines:
+        errors.append("文档中未找到任何 `case:` 条目，请检查格式")
+    
+    return len(errors) == 0, errors
+
+
+def create_xmind_topic(node: Dict[str, Any], topic_id: str = "root", depth: int = 1) -> Dict[str, Any]:
     """创建XMind主题节点"""
     topic = {
         "id": topic_id,
@@ -175,7 +218,7 @@ def create_xmind_topic(node, topic_id="root", depth=1):
     
     return topic
 
-def create_xmind_content(tree, title="测试用例"):
+def create_xmind_content(tree: Dict[str, Any], title: str = "测试用例") -> List[Dict[str, Any]]:
     """创建XMind content.json内容"""
     content = [{
         "id": "sheet_1",
@@ -184,7 +227,7 @@ def create_xmind_content(tree, title="测试用例"):
     }]
     return content
 
-def create_manifest():
+def create_manifest() -> Dict[str, Any]:
     """创建manifest.json"""
     return {
         "file-entries": {
@@ -193,7 +236,7 @@ def create_manifest():
         }
     }
 
-def create_metadata():
+def create_metadata() -> Dict[str, Any]:
     """创建metadata.json"""
     return {
         "creator": {
@@ -204,7 +247,7 @@ def create_metadata():
         "modified": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     }
 
-def convert_md_to_xmind(md_file_path, xmind_file_path, title="测试用例"):
+def convert_md_to_xmind(md_file_path: str, xmind_file_path: str, title: str = "测试用例") -> str:
     """将Markdown文件转换为XMind文件"""
     print(f"正在读取Markdown文件: {md_file_path}")
     
@@ -253,20 +296,53 @@ def convert_md_to_xmind(md_file_path, xmind_file_path, title="测试用例"):
     
     return xmind_file_path
 
-def count_nodes(node):
+def count_nodes(node: Dict[str, Any]) -> int:
     """统计节点总数"""
     count = 1
-    for child in node['children']:
+    for child in node.get('children', []):
         count += count_nodes(child)
     return count
 
 if __name__ == '__main__':
+    if len(sys.argv) < 2:
+        print("用法:")
+        print("  转换模式: python md_to_xmind4ms.py <input.md> <output.xmind> [title]")
+        print("  校验模式: python md_to_xmind4ms.py --validate <input.md>")
+        sys.exit(1)
+    
+    # 校验模式
+    if sys.argv[1] == '--validate':
+        if len(sys.argv) < 3:
+            print("错误: 校验模式需要指定输入文件")
+            print("用法: python md_to_xmind4ms.py --validate <input.md>")
+            sys.exit(1)
+        md_file = sys.argv[2]
+        if not os.path.exists(md_file):
+            print(f"错误: 文件不存在 - {md_file}")
+            sys.exit(1)
+        with open(md_file, 'r', encoding='utf-8') as f:
+            content = f.read()
+        passed, errors = validate_markdown(content)
+        if passed:
+            print(f"校验通过: {md_file}")
+        else:
+            print(f"校验失败: {md_file}")
+            for err in errors:
+                print(f"  - {err}")
+        sys.exit(0 if passed else 1)
+    
+    # 转换模式
     if len(sys.argv) < 3:
+        print("错误: 参数不足")
         print("用法: python md_to_xmind4ms.py <input.md> <output.xmind> [title]")
         sys.exit(1)
     
     md_file = sys.argv[1]
     xmind_file = sys.argv[2]
     title = sys.argv[3] if len(sys.argv) > 3 else "测试用例"
+    
+    if not os.path.exists(md_file):
+        print(f"错误: 输入文件不存在 - {md_file}")
+        sys.exit(1)
     
     convert_md_to_xmind(md_file, xmind_file, title)
