@@ -3,7 +3,7 @@
 name: "Testcase-Writer-XMind4MS"
 description: "根据需求描述生成符合规范的测试用例Markdown文档，并自动转换为XMind思维导图文件保存到本地,生成的XMind文件格式支持直接导入metersphere平台"
 version: "2.0"
-author: "AI Assistant"
+author: "Leolin66"
 trigger: "/生成测试用例"
 temperature: 0.1
 max_tokens: 8000
